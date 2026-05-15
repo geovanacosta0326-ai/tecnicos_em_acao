@@ -3,5 +3,6 @@ pandas
 folium
 streamlit-folium
 sqlalchemy
-requests
 xlsxwriter
+requests
+plotly
