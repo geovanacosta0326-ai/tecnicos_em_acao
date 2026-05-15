@@ -1,8 +1,10 @@
 streamlit
 pandas
 folium
-streamlit-folium
+plotly
 sqlalchemy
+psycopg2-binary
 xlsxwriter
 requests
-plotly
+streamlit-folium
+matplotlib
