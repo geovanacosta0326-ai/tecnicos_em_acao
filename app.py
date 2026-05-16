@@ -218,12 +218,13 @@ st.divider()
 # ─────────────────────────────────────────────
 # 7. ABAS PRINCIPAIS
 # ─────────────────────────────────────────────
-aba_visao, aba_mapa, aba_equipe, aba_alertas, aba_download = st.tabs([
+aba_visao, aba_mapa, aba_equipe, aba_alertas, aba_download, aba_consolidado = st.tabs([
     "📊 Visão Geral",
     "🗺️ Mapa Operacional",
     "👥 Equipe & Supervisores",
     "🚨 Alertas & Acompanhamento",
     "📥 Exportar Dados",
+    "📋 Consolidado",
 ])
 
 CORES = [
@@ -750,4 +751,86 @@ with aba_download:
             ),
             "status_tecnico":        "Status Técnico",
         },
+    )
+
+# ════════════════════════════════════════════
+# ABA 6 — CONSOLIDADO
+# ════════════════════════════════════════════
+with aba_consolidado:
+
+    st.subheader("📋 Tabela Consolidada")
+
+    tipo_filtro = st.radio(
+        "Filtrar por:",
+        ["Região FAEC", "Supervisor"],
+        horizontal=True,
+    )
+
+    if tipo_filtro == "Região FAEC":
+        opcoes = sorted(df_f["regiao_faec"].dropna().unique())
+        escolha = st.selectbox("Selecione a Região FAEC", opcoes)
+        df_cons = df_f[df_f["regiao_faec"] == escolha]
+    else:
+        opcoes = sorted(df_f["supervisor_atual"].dropna().unique())
+        escolha = st.selectbox("Selecione o Supervisor", opcoes)
+        df_cons = df_f[df_f["supervisor_atual"] == escolha]
+
+    st.divider()
+
+    # Tabela consolidada por atividade
+    df_tabela = (
+        df_cons.groupby("atividade")
+        .agg(
+            Total_Supervisores=("supervisor_atual", "nunique"),
+            Total_Técnicos=("tecnico", "nunique"),
+        )
+        .reset_index()
+        .rename(columns={
+            "atividade":          "Atividade",
+            "Total_Supervisores": "Supervisores",
+            "Total_Técnicos":     "Técnicos",
+        })
+        .sort_values("Técnicos", ascending=False)
+    )
+
+    # Linha de total geral
+    total_row = pd.DataFrame([{
+        "Atividade":   "**TOTAL GERAL**",
+        "Supervisores": df_tabela["Supervisores"].sum(),
+        "Técnicos":     df_tabela["Técnicos"].sum(),
+    }])
+    df_tabela_final = pd.concat([df_tabela, total_row], ignore_index=True)
+
+    # Renderizar como HTML para melhor controle visual
+    linhas_html = ""
+    for _, r in df_tabela.iterrows():
+        linhas_html += (
+            f'<tr>'
+            f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;">{r["Atividade"]}</td>'
+            f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;text-align:center;">{int(r["Supervisores"])}</td>'
+            f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;text-align:center;">{int(r["Técnicos"])}</td>'
+            f'</tr>'
+        )
+
+    total_sup = int(df_tabela["Supervisores"].sum())
+    total_tec = int(df_tabela["Técnicos"].sum())
+
+    linhas_html += (
+        f'<tr style="background:#1B4332;">'
+        f'<td style="padding:10px 14px;font-size:14px;font-weight:800;color:white;">TOTAL GERAL</td>'
+        f'<td style="padding:10px 14px;font-size:14px;font-weight:800;color:white;text-align:center;">{total_sup}</td>'
+        f'<td style="padding:10px 14px;font-size:14px;font-weight:800;color:white;text-align:center;">{total_tec}</td>'
+        f'</tr>'
+    )
+
+    st.markdown(
+        f'<table style="width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">'
+        f'<thead><tr style="background:#2D6A4F;">'
+        f'<th style="padding:10px 14px;text-align:left;font-size:13px;color:white;font-weight:700;">Atividade</th>'
+        f'<th style="padding:10px 14px;text-align:center;font-size:13px;color:white;font-weight:700;">Total Supervisores</th>'
+        f'<th style="padding:10px 14px;text-align:center;font-size:13px;color:white;font-weight:700;">Total Técnicos</th>'
+        f'</tr></thead>'
+        f'<tbody>{linhas_html}</tbody>'
+        f'</table>',
+        unsafe_allow_html=True,
     )
