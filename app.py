@@ -26,7 +26,7 @@ st.set_page_config(page_title="Monitoramento ATeG", layout="wide", page_icon="�
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] { background-color: #f8faf9; }
-[data-testid="stSidebar"] { background-color: #f0f7f4; }
+[data-testid="stSidebar"] { background-color: #d8eede; }
 [data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 700 !important; color: #0F6E56 !important; }
 [data-testid="stMetricLabel"] { font-size: 13px !important; color: #2D6A4F !important; font-weight: 500 !important; }
 [data-testid="stMetricDelta"] { font-size: 12px !important; }
@@ -228,8 +228,21 @@ aba_visao, aba_mapa, aba_equipe, aba_alertas, aba_download, aba_consolidado = st
 ])
 
 CORES = [
-    "#1D9E75", "#E63946", "#1D3557", "#FFB703", "#7B2D8B",
-    "#FB8500", "#F4A261", "#606C38", "#023047", "#8ECAE6",
+    "#E63946",  # vermelho vivo
+    "#1D9E75",  # verde
+    "#FFB703",  # amarelo
+    "#7B2D8B",  # roxo
+    "#FB8500",  # laranja
+    "#1D3557",  # azul escuro
+    "#06D6A0",  # verde água
+    "#EF476F",  # rosa
+    "#118AB2",  # azul médio
+    "#8B4513",  # marrom
+    "#2EC4B6",  # ciano
+    "#FF6B6B",  # salmão
+    "#6A0572",  # roxo escuro
+    "#F77F00",  # laranja escuro
+    "#4CC9F0",  # azul claro
 ]
 
 # ════════════════════════════════════════════
@@ -443,19 +456,23 @@ with aba_mapa:
                 f'box-shadow:0px 2px 5px rgba(0,0,0,0.35);">{inicial}</div>'
             )
             html_tooltip = (
-                f'<div style="font-family:sans-serif;background:white;border-radius:10px;'
-                f'width:240px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.12);border:1px solid #eee;">'
-                f'<div style="background:{cor_hex};color:white;padding:10px 14px;">'
-                f'<div style="font-size:13px;font-weight:700;text-transform:uppercase;">{row["tecnico"]}</div>'
-                f'<div style="font-size:11px;opacity:0.85;">{row["atividade"]}</div></div>'
-                f'<div style="padding:10px 14px;font-size:12px;color:#333;line-height:1.6;">'
-                f'<div><b>Supervisor:</b> {row["supervisor_atual"]}</div>'
-                f'<div><b>Município:</b> {row["nome"]}</div>'
-                f'<div><b>Projeto:</b> {row["projeto"]}</div>'
-                f'<div><b>Tempo:</b> {int(row["tempo_projeto_meses"])} meses</div>'
-                f'<div style="color:{gap_color};font-weight:700;margin-top:4px;">'
-                f'<b>GAP:</b> {int(row["gap_dias"])} dias — {gap_label}</div>'
-                f'</div></div>'
+                f'<div style="font-family:\'Segoe UI\',sans-serif;background:white;border-radius:10px;'
+                f'width:230px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.18);">'
+                f'<div style="background:{cor_hex};padding:10px 14px;">'
+                f'<div style="font-size:12px;font-weight:800;color:white;text-transform:uppercase;letter-spacing:0.3px;line-height:1.3;">{row["tecnico"]}</div>'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.85);margin-top:2px;">{row["atividade"]}</div>'
+                f'</div>'
+                f'<div style="padding:10px 14px 4px 14px;">'
+                f'<div style="font-size:11px;color:#555;margin-bottom:5px;"><b style="color:#1B4332;">👤</b> {row["supervisor_atual"]}</div>'
+                f'<div style="font-size:11px;color:#555;margin-bottom:5px;"><b style="color:#1B4332;">📍</b> {row["nome"]}</div>'
+                f'<div style="font-size:11px;color:#555;margin-bottom:5px;"><b style="color:#1B4332;">📂</b> {row["projeto"]}</div>'
+                f'<div style="font-size:11px;color:#555;margin-bottom:8px;"><b style="color:#1B4332;">⏱️</b> {int(row["tempo_projeto_meses"])} meses</div>'
+                f'</div>'
+                f'<div style="margin:0 14px 12px 14px;padding:6px 10px;background:{gap_color}20;'
+                f'border-radius:6px;border-left:3px solid {gap_color};">'
+                f'<span style="font-size:11px;font-weight:700;color:{gap_color};">{int(row["gap_dias"])} dias — {gap_label}</span>'
+                f'</div>'
+                f'</div>'
             )
 
             folium.Marker(
@@ -761,19 +778,29 @@ with aba_consolidado:
     st.subheader("📋 Tabela Consolidada")
 
     tipo_filtro = st.radio(
-        "Filtrar por:",
-        ["Região FAEC", "Supervisor"],
+        "Visualizar por:",
+        ["Todos", "Região FAEC", "Supervisor", "Projeto"],
         horizontal=True,
     )
 
-    if tipo_filtro == "Região FAEC":
+    if tipo_filtro == "Todos":
+        df_cons = df_f.copy()
+        escolha = "Todos"
+
+    elif tipo_filtro == "Região FAEC":
         opcoes = sorted(df_f["regiao_faec"].dropna().unique())
         escolha = st.selectbox("Selecione a Região FAEC", opcoes)
         df_cons = df_f[df_f["regiao_faec"] == escolha]
-    else:
+
+    elif tipo_filtro == "Supervisor":
         opcoes = sorted(df_f["supervisor_atual"].dropna().unique())
         escolha = st.selectbox("Selecione o Supervisor", opcoes)
         df_cons = df_f[df_f["supervisor_atual"] == escolha]
+
+    elif tipo_filtro == "Projeto":
+        opcoes = sorted(df_f["projeto"].dropna().unique())
+        escolha = st.selectbox("Selecione o Projeto", opcoes)
+        df_cons = df_f[df_f["projeto"] == escolha]
 
     st.divider()
 
@@ -793,15 +820,6 @@ with aba_consolidado:
         .sort_values("Técnicos", ascending=False)
     )
 
-    # Linha de total geral
-    total_row = pd.DataFrame([{
-        "Atividade":   "**TOTAL GERAL**",
-        "Supervisores": df_tabela["Supervisores"].sum(),
-        "Técnicos":     df_tabela["Técnicos"].sum(),
-    }])
-    df_tabela_final = pd.concat([df_tabela, total_row], ignore_index=True)
-
-    # Renderizar como HTML para melhor controle visual
     linhas_html = ""
     for _, r in df_tabela.iterrows():
         linhas_html += (
@@ -834,3 +852,65 @@ with aba_consolidado:
         f'</table>',
         unsafe_allow_html=True,
     )
+
+    # Tabela extra de técnicos quando filtro for Supervisor
+    if tipo_filtro == "Supervisor":
+        st.divider()
+        st.subheader(f"👥 Técnicos de {escolha}")
+
+        df_tec_detalhe = (
+            df_cons.groupby("tecnico")
+            .agg(
+                Atividade=("atividade", "first"),
+                Primeira_Visita=("data_primeira_visita", "min"),
+                Ultima_Visita=("data_ultima_visita", "max"),
+                Tempo_Meses=("tempo_projeto_meses", "mean"),
+            )
+            .reset_index()
+            .rename(columns={
+                "tecnico":          "Técnico",
+                "Primeira_Visita":  "Primeira Visita",
+                "Ultima_Visita":    "Última Visita",
+                "Tempo_Meses":      "Tempo (meses)",
+            })
+            .sort_values("Técnico")
+        )
+        df_tec_detalhe["Primeira Visita"] = pd.to_datetime(df_tec_detalhe["Primeira Visita"]).dt.strftime("%d/%m/%Y")
+        df_tec_detalhe["Última Visita"]   = pd.to_datetime(df_tec_detalhe["Última Visita"]).dt.strftime("%d/%m/%Y")
+        df_tec_detalhe["Tempo (meses)"]   = df_tec_detalhe["Tempo (meses)"].round(0).astype(int)
+
+        linhas_tec = ""
+        for _, r in df_tec_detalhe.iterrows():
+            linhas_tec += (
+                f'<tr>'
+                f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;">{r["Técnico"]}</td>'
+                f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;">{r["Atividade"]}</td>'
+                f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;text-align:center;">{r["Primeira Visita"]}</td>'
+                f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;text-align:center;">{r["Última Visita"]}</td>'
+                f'<td style="padding:7px 14px;border-bottom:1px solid #e8f4ee;font-size:13px;color:#1B4332;text-align:center;">{r["Tempo (meses)"]}</td>'
+                f'</tr>'
+            )
+
+        linhas_tec += (
+            f'<tr style="background:#1B4332;">'
+            f'<td style="padding:10px 14px;font-size:14px;font-weight:800;color:white;">TOTAL</td>'
+            f'<td style="padding:10px 14px;color:white;">—</td>'
+            f'<td style="padding:10px 14px;color:white;">—</td>'
+            f'<td style="padding:10px 14px;color:white;">—</td>'
+            f'<td style="padding:10px 14px;font-size:14px;font-weight:800;color:white;text-align:center;">{len(df_tec_detalhe)} técnicos</td>'
+            f'</tr>'
+        )
+
+        st.markdown(
+            f'<table style="width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">'
+            f'<thead><tr style="background:#2D6A4F;">'
+            f'<th style="padding:10px 14px;text-align:left;font-size:13px;color:white;font-weight:700;">Técnico</th>'
+            f'<th style="padding:10px 14px;text-align:left;font-size:13px;color:white;font-weight:700;">Atividade</th>'
+            f'<th style="padding:10px 14px;text-align:center;font-size:13px;color:white;font-weight:700;">Primeira Visita</th>'
+            f'<th style="padding:10px 14px;text-align:center;font-size:13px;color:white;font-weight:700;">Última Visita</th>'
+            f'<th style="padding:10px 14px;text-align:center;font-size:13px;color:white;font-weight:700;">Tempo (meses)</th>'
+            f'</tr></thead>'
+            f'<tbody>{linhas_tec}</tbody>'
+            f'</table>',
+            unsafe_allow_html=True,
+        )
