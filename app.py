@@ -38,6 +38,9 @@ h3 { color: #2D6A4F !important; font-size: 15px !important; font-weight: 600 !im
 header { visibility: hidden !important; height: 0 !important; }
 footer { visibility: hidden !important; height: 0 !important; }
 #MainMenu { visibility: hidden !important; }
+[data-testid="manage-app-button"] { display: none !important; }
+.viewerBadge_container__r5tak { display: none !important; }
+.stDeployButton { display: none !important; }
 
 /* Remover padding do topo */
 .block-container { padding-top: 0.5rem !important; }
@@ -238,10 +241,10 @@ CORES = [
     "#EF476F",  # rosa
     "#118AB2",  # azul médio
     "#8B4513",  # marrom
-    "#2EC4B6",  # ciano
+    "#267D74",  # ciano
     "#FF6B6B",  # salmão
     "#6A0572",  # roxo escuro
-    "#F77F00",  # laranja escuro
+    "#3600F7",  # laranja escuro
     "#4CC9F0",  # azul claro
 ]
 
