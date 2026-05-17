@@ -221,13 +221,14 @@ st.divider()
 # ─────────────────────────────────────────────
 # 7. ABAS PRINCIPAIS
 # ─────────────────────────────────────────────
-aba_visao, aba_mapa, aba_equipe, aba_alertas, aba_download, aba_consolidado = st.tabs([
+aba_visao, aba_mapa, aba_equipe, aba_alertas, aba_download, aba_consolidado, aba_historico = st.tabs([
     "📊 Visão Geral",
     "🗺️ Mapa Operacional",
     "👥 Equipe & Supervisores",
     "🚨 Alertas & Acompanhamento",
     "📥 Exportar Dados",
     "📋 Consolidado",
+    "🔄 Histórico de Trocas",
 ])
 
 CORES = [
@@ -241,10 +242,10 @@ CORES = [
     "#EF476F",  # rosa
     "#118AB2",  # azul médio
     "#8B4513",  # marrom
-    "#267D74",  # ciano
+    "#2EC4B6",  # ciano
     "#FF6B6B",  # salmão
     "#6A0572",  # roxo escuro
-    "#3600F7",  # laranja escuro
+    "#F77F00",  # laranja escuro
     "#4CC9F0",  # azul claro
 ]
 
@@ -917,3 +918,274 @@ with aba_consolidado:
             f'</table>',
             unsafe_allow_html=True,
         )
+
+# ════════════════════════════════════════════
+# ABA 7 — HISTÓRICO DE TROCAS
+# ════════════════════════════════════════════
+with aba_historico:
+
+    @st.cache_data(ttl=60)
+    def carregar_historico():
+        engine_pg = get_engine()
+        try:
+            with engine_pg.connect() as conn:
+                return pd.read_sql(text("SELECT * FROM public.historico_trocas ORDER BY data_troca DESC"), conn)
+        except Exception:
+            return pd.DataFrame(columns=[
+                "id", "data_troca", "tipo_troca", "projeto", "atividade",
+                "regiao_faec", "pessoa_saindo", "pessoa_entrando",
+                "motivo", "observacao", "registrado_por", "data_registro"
+            ])
+
+    def salvar_troca(dados):
+        engine_pg = get_engine()
+        with engine_pg.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO public.historico_trocas
+                    (data_troca, tipo_troca, projeto, atividade, regiao_faec,
+                     pessoa_saindo, pessoa_entrando, motivo, observacao, registrado_por)
+                VALUES
+                    (:data_troca, :tipo_troca, :projeto, :atividade, :regiao_faec,
+                     :pessoa_saindo, :pessoa_entrando, :motivo, :observacao, :registrado_por)
+            """), dados)
+            conn.commit()
+
+    # ── KPIs do histórico ──
+    df_hist = carregar_historico()
+
+    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+    col_h1.metric("🔄 Total de Trocas",    len(df_hist))
+    col_h2.metric("👤 Trocas de Técnico",  len(df_hist[df_hist["tipo_troca"] == "Técnico"])  if not df_hist.empty else 0)
+    col_h3.metric("🧑‍💼 Trocas de Supervisor", len(df_hist[df_hist["tipo_troca"] == "Supervisor"]) if not df_hist.empty else 0)
+    col_h4.metric("📅 Último Registro",
+        df_hist["data_troca"].max().strftime("%d/%m/%Y") if not df_hist.empty and pd.notna(df_hist["data_troca"].max()) else "—"
+    )
+
+    st.divider()
+
+    col_form, col_tabela = st.columns([1, 2])
+
+    # ── Formulário de registro ──
+    with col_form:
+        st.subheader("➕ Registrar Troca")
+
+        supervisor_sel = st.selectbox(
+            "🧑‍💼 Supervisor",
+            sorted(df_f["supervisor_atual"].dropna().unique()),
+            key="sup_form_sel",
+        )
+
+        tecnicos_sup = sorted(
+            df_f[df_f["supervisor_atual"] == supervisor_sel]["tecnico"].dropna().unique()
+        )
+        st.caption(f"{len(tecnicos_sup)} técnicos vinculados")
+
+        acao = st.radio(
+            "Ação",
+            ["➕ Vincular técnico", "➖ Desvincular técnico"],
+            horizontal=True,
+            key="acao_troca",
+        )
+
+        # Checkbox FORA do form para funcionar dinamicamente
+        tecnico_novo = False
+        supervisor_destino_ext = supervisor_sel
+        if acao == "➕ Vincular técnico":
+            supervisor_destino_ext = st.selectbox(
+                "🧑‍💼 Vincular para qual supervisor",
+                sorted(df_f["supervisor_atual"].dropna().unique()),
+                key="sup_dest_ext",
+            )
+            tecnico_novo = st.checkbox("É um técnico novo (não está na lista)?", key="chk_novo")
+
+        with st.form("form_troca", clear_on_submit=True):
+            data_troca = st.date_input("📅 Data", value=datetime.now().date())
+
+            if acao == "➕ Vincular técnico":
+                if tecnico_novo:
+                    novo_tecnico = st.text_input("👤 Nome do novo técnico")
+                else:
+                    novo_tecnico = st.selectbox("👤 Técnico a vincular", sorted(df_f["tecnico"].dropna().unique()))
+                pessoa_saindo     = "—"
+                supervisor_destino = supervisor_destino_ext
+                tipo_registro     = "Vínculo"
+                motivo_label      = "❓ Motivo da entrada"
+
+            else:
+                supervisor_destino = supervisor_sel
+                pessoa_saindo = st.selectbox("👤 Técnico a desvincular", tecnicos_sup)
+                novo_tecnico  = "—"
+                tipo_registro = "Desvinculo"
+                motivo_label  = "❓ Motivo do desvinculo"
+
+            motivo = st.selectbox(motivo_label, [
+                "Desligamento", "Transferência", "Licença", "Promoção",
+                "Aprovado pelo Credenciamento", "Outro"
+            ])
+            observacao     = st.text_area("📝 Observação (opcional)", height=50)
+            registrado_por = st.text_input("✍️ Registrado por")
+
+            submitted = st.form_submit_button("💾 Salvar", use_container_width=True)
+
+            if submitted:
+                if not registrado_por.strip():
+                    st.error("Preencha quem registrou.")
+                elif acao == "➕ Vincular técnico" and not str(novo_tecnico).strip():
+                    st.error("Informe o técnico a vincular.")
+                else:
+                    dados_tec = df_f[
+                        (df_f["supervisor_atual"] == supervisor_sel) &
+                        (df_f["tecnico"] == pessoa_saindo)
+                    ]
+                    projeto_troca   = dados_tec.iloc[0]["projeto"]     if not dados_tec.empty else ""
+                    atividade_troca = dados_tec.iloc[0]["atividade"]   if not dados_tec.empty else ""
+                    regiao_troca    = dados_tec.iloc[0]["regiao_faec"] if not dados_tec.empty else ""
+                    try:
+                        salvar_troca({
+                            "data_troca":      str(data_troca),
+                            "tipo_troca":      "Técnico",
+                            "projeto":         projeto_troca,
+                            "atividade":       atividade_troca,
+                            "regiao_faec":     regiao_troca,
+                            "pessoa_saindo":   pessoa_saindo.upper(),
+                            "pessoa_entrando": str(novo_tecnico).strip().upper(),
+                            "motivo":          motivo,
+                            "observacao":      f"Ação: {tipo_registro} | Supervisor origem: {supervisor_sel} | Supervisor destino: {supervisor_destino}" + (f" | {observacao}" if observacao else ""),
+                            "registrado_por":  registrado_por.strip().upper(),
+                        })
+                        st.success(f"✅ {tipo_registro} registrado!")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
+    # ── Tabela de histórico ──
+    with col_tabela:
+        st.subheader("📋 Histórico de Trocas")
+
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            filtro_tipo = st.selectbox("Filtrar por tipo", ["Todos", "Técnico", "Supervisor"], key="hist_tipo")
+        with col_f2:
+            filtro_proj = st.selectbox("Filtrar por projeto", ["Todos"] + sorted(df_f["projeto"].dropna().unique()), key="hist_proj")
+
+        df_hist_f = df_hist.copy()
+        if filtro_tipo != "Todos":
+            df_hist_f = df_hist_f[df_hist_f["tipo_troca"] == filtro_tipo]
+        if filtro_proj != "Todos":
+            df_hist_f = df_hist_f[df_hist_f["projeto"] == filtro_proj]
+
+        if df_hist_f.empty:
+            st.info("Nenhuma troca registrada ainda.")
+        else:
+            df_hist_f["data_troca"] = pd.to_datetime(df_hist_f["data_troca"]).dt.strftime("%d/%m/%Y")
+
+            # Extrair campos da observação
+            def extrair_campo(obs, campo):
+                if pd.isna(obs):
+                    return "—"
+                for part in str(obs).split("|"):
+                    if f"{campo}:" in part:
+                        return part.split(":", 1)[1].strip()
+                return "—"
+
+            df_hist_f["acao"]            = df_hist_f["observacao"].apply(lambda x: extrair_campo(x, "Ação"))
+            df_hist_f["sup_origem"]      = df_hist_f["observacao"].apply(lambda x: extrair_campo(x, "Supervisor origem"))
+            df_hist_f["sup_destino"]     = df_hist_f["observacao"].apply(lambda x: extrair_campo(x, "Supervisor destino"))
+
+            linhas_hist = ""
+            for _, r in df_hist_f.iterrows():
+                cor_acao = "#1D9E75" if "Vínculo" in str(r["acao"]) else "#E24B4A"
+                linhas_hist += (
+                    f'<tr>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;color:#333;white-space:nowrap;">{r["data_troca"]}</td>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;"><span style="background:{cor_acao}22;color:{cor_acao};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">{r["acao"]}</span></td>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;color:#555;">{r["sup_origem"]}</td>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;color:#1B4332;font-weight:600;">{r["sup_destino"]}</td>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;color:#E24B4A;">{r["pessoa_saindo"]}</td>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;color:#1D9E75;font-weight:600;">{r["pessoa_entrando"]}</td>'
+                    f'<td style="padding:7px 12px;border-bottom:1px solid #e8f4ee;font-size:12px;color:#333;">{r["motivo"]}</td>'
+                    f'</tr>'
+                )
+
+            st.markdown(
+                f'<div style="overflow-x:auto;">'
+                f'<table style="width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">'
+                f'<thead><tr style="background:#2D6A4F;">'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Data</th>'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Ação</th>'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Sup. Origem</th>'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Sup. Destino</th>'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Saiu</th>'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Entrou</th>'
+                f'<th style="padding:9px 12px;text-align:left;font-size:12px;color:white;font-weight:700;">Motivo</th>'
+                f'</tr></thead>'
+                f'<tbody>{linhas_hist}</tbody>'
+                f'</table></div>',
+                unsafe_allow_html=True,
+            )
+
+            # Download Excel
+            st.markdown("<br>", unsafe_allow_html=True)
+            df_export_hist = df_hist_f[["data_troca", "acao", "sup_origem", "sup_destino", "pessoa_saindo", "pessoa_entrando", "motivo"]].copy()
+            df_export_hist.columns = ["Data", "Ação", "Sup. Origem", "Sup. Destino", "Saiu", "Entrou", "Motivo"]
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+                df_export_hist.to_excel(writer, sheet_name="Histórico Trocas", index=False)
+            st.download_button(
+                label="📥 Baixar Excel",
+                data=buf.getvalue(),
+                file_name=f"historico_trocas_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+            # Excluir registro
+            st.divider()
+            st.markdown("**🗑️ Excluir registro**")
+            ids_disp = df_hist_f["id"].tolist()
+            id_excluir = st.selectbox(
+                "Selecione o ID para excluir",
+                ids_disp,
+                format_func=lambda x: f"ID {x} — {df_hist_f[df_hist_f['id']==x]['pessoa_saindo'].values[0]} → {df_hist_f[df_hist_f['id']==x]['pessoa_entrando'].values[0]}",
+                key="del_id"
+            )
+            if st.button("🗑️ Excluir", type="secondary", key="btn_del"):
+                try:
+                    engine_pg = get_engine()
+                    with engine_pg.connect() as conn:
+                        conn.execute(text("DELETE FROM public.historico_trocas WHERE id = :id"), {"id": int(id_excluir)})
+                        conn.commit()
+                    st.success(f"Registro ID {id_excluir} excluído!")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao excluir: {e}")
+
+        st.divider()
+
+        # Projetos com mais trocas (alerta de instabilidade)
+        if not df_hist.empty:
+            st.subheader("⚠️ Projetos com mais trocas")
+            df_instavel = (
+                df_hist.groupby("projeto")
+                .size()
+                .reset_index(name="Trocas")
+                .sort_values("Trocas", ascending=False)
+                .head(8)
+            )
+            fig_inst = px.bar(
+                df_instavel, x="Trocas", y="projeto", orientation="h",
+                color="Trocas",
+                color_continuous_scale=["#74C69D", "#E24B4A"],
+                text="Trocas",
+            )
+            fig_inst.update_traces(textposition="outside")
+            fig_inst.update_layout(
+                height=300,
+                margin=dict(l=0, r=40, t=10, b=10),
+                coloraxis_showscale=False,
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=False, title=None),
+                yaxis=dict(showgrid=False, title=None),
+            )
+            st.plotly_chart(fig_inst, use_container_width=True)
