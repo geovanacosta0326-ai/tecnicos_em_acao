@@ -8,12 +8,12 @@ def realizar_migracao_completa():
     # =====================================================
     # 1. CONFIGURAÇÃO DAS CONEXÕES
     # =====================================================
-    
+
     # Conexão Local (Origem)
     engine_local = create_engine(
         "postgresql+psycopg2://postgres:faecsenar2022@localhost:5432/api_sisateg"
     )
-    
+
     # Conexão Remota (Destino)
     url_remota = URL.create(
         "postgresql+psycopg2",
@@ -30,38 +30,67 @@ def realizar_migracao_completa():
         print("INICIANDO MIGRAÇÃO: LOCAL -> SERVIDOR")
         print("==================================================")
 
+        # =====================================================
         # 2. LEITURA DOS DADOS LOCAIS
-        # Usando o nome exato da view que você confirmou
+        # =====================================================
         query_local = "SELECT * FROM public.vw_mapa_consolidado_ateg_georrefercnaias"
-        
-        print(f"Lendo dados da view local...")
+
+        print("Lendo dados da view local...")
         df = pd.read_sql(query_local, engine_local)
 
         if df.empty:
             print("A view está vazia. Abortando migração.")
             return
 
+        # =====================================================
         # 3. PREPARAÇÃO DOS DADOS
-        # Adicionamos a coluna de controle que você tem no servidor
+        # =====================================================
         df['data_atualizacao'] = datetime.now()
-        
-        # Garantir que colunas de data sejam tratadas corretamente
-        for col in df.columns:
-            if 'data' in col or 'visita' in col:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
+
+        # Colunas que são datas de verdade
+        cols_data = [
+            "data_primeira_visita",
+            "data_ultima_visita",
+            "data_atualizacao",
+        ]
+
+        # Colunas que são números inteiros (NÃO converter para datetime)
+        cols_inteiras = [
+            "total_visitas",
+            "visitas_validas",
+            "visitas_invalidas",
+            "total_propriedades",
+            "propriedades_ativas",
+            "propriedades_inativas",
+            "tempo_projeto_meses",
+        ]
+
+        # Converte apenas as colunas de data reais
+        for col in cols_data:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
+
+        # Garante que colunas numéricas sejam inteiros
+        for col in cols_inteiras:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
         print(f"Campos identificados: {list(df.columns)}")
+        print(f"Dtypes após preparação:")
+        for col in df.columns:
+            print(f"  {col}: {df[col].dtype}")
         print(f"Total de registros a enviar: {len(df)}")
 
+        # =====================================================
         # 4. ENVIO PARA O SERVIDOR
-        # Usamos 'replace' para que o banco remoto aceite as NOVAS colunas
-        print("Enviando dados para o servidor remoto (Substituindo tabela)...")
-        
+        # =====================================================
+        print("\nEnviando dados para o servidor remoto (substituindo tabela)...")
+
         df.to_sql(
-            'mapa_consolidado_ateg', 
+            'mapa_consolidado_ateg',
             engine_remoto,
             schema='public',
-            if_exists='replace', # Isso resolve o erro de 'coluna inexistente'
+            if_exists='replace',
             index=False,
             chunksize=300,
             method='multi'
